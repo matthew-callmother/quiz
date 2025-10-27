@@ -1,0 +1,74 @@
+{
+  "id": "water-heater",
+  "title": "Find Your Best Water Heater",
+  "subtitle": "Answer a few quick questions.",
+  "cta_url": "/book/install",
+  "cta_label": "Book an installation",
+  "cta2_url": "/services/water-heater-installation",
+  "cta2_label": "Compare options",
+
+  "options": [
+    { "id": "gas_tankless",  "label": "Gas Tankless",      "cta": "/services/tankless-water-heater-installation" },
+    { "id": "elec_tankless", "label": "Electric Tankless", "cta": "/services/tankless-water-heater-installation" },
+    { "id": "gas_tank",      "label": "Gas Tank",          "cta": "/services/water-heater-installation" },
+    { "id": "elec_tank",     "label": "Electric Tank",     "cta": "/services/water-heater-installation" },
+    { "id": "heat_pump",     "label": "Heat Pump",         "cta": "/services/water-heater-installation" }
+  ],
+
+  "questions": [
+    {
+      "id": "fuel",
+      "question": "What fuel do you have available?",
+      "tooltip": "If unsure, check your current water heater or utility bill.",
+      "answers": [
+        { "label": "Natural gas", "set": { "fuel": "gas" }, "add": { "gas_tankless": 2, "gas_tank": 2 } },
+        { "label": "Electric only", "set": { "fuel": "elec" }, "add": { "elec_tank": 2, "elec_tankless": 2, "heat_pump": 2 } }
+      ]
+    },
+    {
+      "id": "usage",
+      "question": "How often do you run multiple hot-water tasks at once?",
+      "showif": [ { "path": "fuel", "exists": true } ],
+      "answers": [
+        { "label": "Often", "add": { "gas_tankless": 3, "elec_tankless": 2 } },
+        { "label": "Sometimes", "add": { "gas_tankless": 2, "elec_tankless": 2, "gas_tank": 1, "elec_tank": 1 } },
+        { "label": "Rarely", "add": { "gas_tank": 2, "elec_tank": 2, "heat_pump": 1 } }
+      ]
+    },
+    {
+      "id": "capacity",
+      "question": "Household size?",
+      "answers": [
+        { "label": "1–2 people", "add": { "elec_tank": 1, "heat_pump": 2, "elec_tankless": 2 } },
+        { "label": "3–4 people", "add": { "gas_tank": 2, "gas_tankless": 2, "heat_pump": 1 } },
+        { "label": "5+", "add": { "gas_tankless": 3, "gas_tank": 2 } }
+      ]
+    },
+    {
+      "id": "priority",
+      "question": "What matters most?",
+      "answers": [
+        { "label": "Lowest upfront cost", "add": { "gas_tank": 2, "elec_tank": 2 } },
+        { "label": "Lower utility bills", "add": { "heat_pump": 3, "gas_tankless": 1, "elec_tankless": 1 } },
+        { "label": "Endless hot water", "add": { "gas_tankless": 3, "elec_tankless": 2 } }
+      ]
+    },
+    {
+      "id": "elec_panel",
+      "question": "Electrical capacity (if electric)?",
+      "showif": [ { "path": "fuel", "eq": "elec" } ],
+      "answers": [
+        { "label": "200A or can upgrade", "add": { "elec_tankless": 2, "heat_pump": 2, "elec_tank": 1 } },
+        { "label": "<200A / unsure", "add": { "elec_tank": 2, "heat_pump": 1 } }
+      ]
+    }
+  ],
+
+  "result_notes": {
+    "gas_tankless":  { "text": "Endless hot water; verify gas line & venting." },
+    "elec_tankless": { "text": "Endless hot water; confirm panel capacity." },
+    "gas_tank":      { "text": "Lower upfront; right-size capacity & recovery." },
+    "elec_tank":     { "text": "Simple install; good where electric only." },
+    "heat_pump":     { "text": "High efficiency; best in conditioned space." }
+  }
+}
