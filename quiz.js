@@ -275,6 +275,6 @@
   }
 
   // auto-run for any <script src="...wh-quiz.js" data-config="...">
-  const scripts = Array.from(document.querySelectorAll('script[src*="wh-quiz.js"]'));
+  const scripts = Array.from(document.querySelectorAll('script[src*="quiz.js"]'));
   scripts.forEach(init);
 })();
