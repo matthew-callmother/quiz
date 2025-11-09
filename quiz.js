@@ -26,7 +26,7 @@
       answerId:a.id||null,
       answerLabel:a.label||a.answer||''
     });
-    if(a.set) Object.assign(state.flags,a.set);
+    if(a.set) Object.assign(state.flags, a.set);
     if(a.add) for(const [k,v] of Object.entries(a.add)){
       state.scores[k]=(state.scores[k]||0)+Number(v||0);
     }
@@ -77,8 +77,9 @@
       answeredCount:0,
       started:false,
       questions:cfg.questions||[],
-      selections:{}, // multi: { [qId]: Set<answerId> }
-      trail:[],      // full Q&A
+      selections:{},       // multi: { [qId]: Set<answerId> }
+      selectionOrder:{},   // multi: { [qId]: [answerId,...] } FIFO
+      trail:[],            // full Q&A
       contact:null
     };
 
@@ -111,7 +112,10 @@
 
       const list=el('div','quiz-answers');
       const multi=isMulti(q);
-      if(multi && !state.selections[q.id]) state.selections[q.id]=new Set();
+      if(multi){
+        if(!state.selections[q.id]) state.selections[q.id]=new Set();
+        if(!state.selectionOrder[q.id]) state.selectionOrder[q.id]=[];
+      }
 
       (q.answers||[]).forEach((a,idx)=>{
         if(!passesShowIf(state.flags,a)) return;
@@ -126,15 +130,32 @@
         if(multi){
           on(btn,'click',()=>{
             const sel=state.selections[q.id];
+            const order=state.selectionOrder[q.id];
             const k=btn.dataset.aid;
-            if(sel.has(k)) sel.delete(k);
-            else{
-              const max=q.max||Infinity;
-              if(sel.size>=max) return;
-              sel.add(k);
+            const max=q.max||Infinity;
+
+            // unselect if already selected
+            if(sel.has(k)){
+              sel.delete(k);
+              const i=order.indexOf(k); if(i>-1) order.splice(i,1);
+              btn.classList.remove('selected');
+              GA('quiz_toggle',{quiz_id:cfg.id,step_id:q.id,answer_id:k,selected:false});
+              return;
             }
-            btn.classList.toggle('selected',sel.has(k));
-            GA('quiz_toggle',{quiz_id:cfg.id,step_id:q.id,answer_id:k,selected:state.selections[q.id].has(k)});
+
+            // at cap: FIFO replace (drop oldest)
+            if(sel.size>=max && isFinite(max)){
+              const oldest=order.shift();
+              if(oldest!==undefined){
+                sel.delete(oldest);
+                [...list.children].forEach(b=>{ if(b.dataset.aid===oldest) b.classList.remove('selected'); });
+              }
+            }
+
+            sel.add(k);
+            order.push(k);
+            btn.classList.add('selected');
+            GA('quiz_toggle',{quiz_id:cfg.id,step_id:q.id,answer_id:k,selected:true});
           });
         }else{
           on(btn,'click',()=>{
@@ -162,7 +183,7 @@
         const hint=el('div','quiz-hint'); controls.appendChild(nextBtn); controls.appendChild(hint);
         wrap.appendChild(controls);
 
-        // restore selected on rerender
+        // restore selected styles on rerender
         const sel=state.selections[q.id];
         [...list.children].forEach(b=>b.classList.toggle('selected',sel.has(b.dataset.aid)));
 
@@ -180,6 +201,7 @@
           state.answeredCount++;
           GA('quiz_step',{quiz_id:cfg.id,step_id:q.id,step_index:state.stepIndex,multi_count:ids.length,percent_complete:progressPct(state)});
 
+          // branch if any chosen defines next
           const branch=chosen.find(a=>a&&a.next);
           if(branch&&branch.next){
             if(branch.next.startsWith('result:')){ showResult(branch.next.split(':')[1]); return; }
@@ -201,7 +223,7 @@
         w.innerHTML=`<label>${k.charAt(0).toUpperCase()+k.slice(1)}</label><input name="${k}" required>`;
         f.appendChild(w);
       });
-      const hp=el('input'); hp.name='company'; hp.style.display='none'; f.appendChild(hp);
+      const hp=el('input'); hp.name='company'; hp.style.display='none'; f.appendChild(hp); // honeypot
       const btn=el('button','quiz-cta'); btn.type='submit'; btn.textContent='See recommendation'; f.appendChild(btn);
       root.innerHTML=''; root.appendChild(container); container.appendChild(f);
 
@@ -221,7 +243,7 @@
       const container=el('div','quiz'); header(container);
 
       const res=el('div','quiz-result');
-      const ttl=el('div','quiz-result-title'); ttl.textContent=resOpt.label||'Result'; res.appendChild(ttl);
+      const ttl=el('div','quiz-result-title'); ttl.textContent = resOpt.label || 'Result'; res.appendChild(ttl);
 
       const rn=(cfg.result_notes&&cfg.result_notes[resId])||{};
       if(rn.photo_url){ const im=el('img','quiz-result-photo'); im.src=rn.photo_url; im.alt=''; res.appendChild(im); }
@@ -237,6 +259,7 @@
 
       GA('quiz_complete',{quiz_id:cfg.id,result_id:resId,percent_complete:100});
 
+      // final payload
       post(cfg.webhook,{
         type:'completion',
         quiz_id:cfg.id,
