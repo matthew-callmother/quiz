@@ -1,0 +1,161 @@
+{
+  "id": "tankless-or-not",
+  "title": "Should I Buy a Tankless?",
+  "subtitle": "Is a tankless water heater right for your home?",
+  "cta_url": "/services/water-heater-installation",
+  "cta_label": "Book an installation",
+  "cta2_url": "/contact",
+  "cta2_label": "Talk to a plumber",
+  "webhook": "https://hooks.make.com/REPLACE_ME",
+  "collect_contact": true,
+  "contact_fields": ["name", "email"],
+
+  "options": [
+    { "id": "gas_tankless",  "label": "Gas Tankless", "cta": "/services/tankless-water-heater-installation" },
+    { "id": "gas_tank",      "label": "Gas Tank", "cta": "/services/water-heater-installation" },
+    { "id": "electric_tank", "label": "Electric Tank", "cta": "/services/water-heater-installation" },
+    { "id": "heat_pump",     "label": "Heat Pump (Hybrid)", "cta": "/services/water-heater-installation" },
+    { "id": "dual_tank",     "label": "Add a Second Tank (Parallel)", "cta": "/services/water-heater-installation" }
+  ],
+
+  "questions": [
+    {
+      "id": "priority",
+      "type": "multi",
+      "min": 1,
+      "max": 2,
+      "question": "What’s most important to you? (choose up to 2)",
+      "answers": [
+        { "id": "cost", "label": "Lower installation cost", "add": { "gas_tank": 3, "electric_tank": 3 } },
+        { "id": "longevity", "label": "Long-lasting product", "add": { "gas_tankless": 2, "heat_pump": 1 } },
+        { "id": "savings", "label": "Long term cost savings", "add": { "heat_pump": 3, "gas_tankless": 1 } },
+        { "id": "endless", "label": "Endless hot water", "add": { "gas_tankless": 3, "dual_tank": 1 } },
+        { "id": "efficient", "label": "Energy efficiency", "add": { "heat_pump": 3, "gas_tankless": 1 } }
+      ]
+    },
+
+    {
+      "id": "current_type",
+      "question": "What kind of water heater do you currently have?",
+      "answers": [
+        { "id": "tank", "label": "Water heater tank", "set": { "type": "tank" } },
+        { "id": "hybrid", "label": "Hybrid water heater", "set": { "type": "hybrid" } },
+        { "id": "new", "label": "Building a new home and want to pick", "set": { "type": "new" } }
+      ]
+    },
+
+    {
+      "id": "tank_size",
+      "question": "What tank size?",
+      "showif": [{ "path": "type", "eq": "tank" }],
+      "answers": [
+        { "id": "50g", "label": "50 gallon", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "75g", "label": "75 gallon", "add": { "gas_tank": 2, "electric_tank": 2 } },
+        { "id": "100g", "label": "100 gallon", "add": { "gas_tank": 3, "dual_tank": 1 } }
+      ]
+    },
+
+    {
+      "id": "hybrid_size",
+      "question": "What size is your hybrid water heater?",
+      "showif": [{ "path": "type", "eq": "hybrid" }],
+      "answers": [
+        { "id": "50h", "label": "50 gallon", "add": { "heat_pump": 2 } },
+        { "id": "65h", "label": "65 gallon", "add": { "heat_pump": 2 } },
+        { "id": "80h", "label": "80 gallon", "add": { "heat_pump": 3 } }
+      ]
+    },
+
+    {
+      "id": "people",
+      "question": "How many people are in the home?",
+      "answers": [
+        { "id": "1-2", "label": "1–2", "add": { "electric_tank": 2, "heat_pump": 1 } },
+        { "id": "3-4", "label": "3–4", "add": { "gas_tank": 1, "gas_tankless": 1 } },
+        { "id": "5+", "label": "5+", "add": { "gas_tankless": 3, "dual_tank": 1 } }
+      ]
+    },
+
+    {
+      "id": "num_heaters",
+      "question": "How many water heaters do you have?",
+      "answers": [
+        { "id": "1h", "label": "1", "add": {} },
+        { "id": "2h", "label": "2", "add": { "dual_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "location",
+      "question": "Where is it located?",
+      "answers": [
+        { "id": "garage", "label": "Garage", "add": { "gas_tankless": 1, "heat_pump": 1 } },
+        { "id": "attic", "label": "Attic", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "closet", "label": "Hall closet", "add": { "heat_pump": 2 } }
+      ]
+    },
+
+    {
+      "id": "fuel",
+      "question": "What fuel source does your home use?",
+      "tooltip": "If your heater has a yellow flexible line, it’s natural gas.",
+      "answers": [
+        { "id": "gas", "label": "Gas", "set": { "fuel": "gas" }, "add": { "gas_tankless": 2, "gas_tank": 2 } },
+        { "id": "electric", "label": "Electric", "set": { "fuel": "electric" }, "add": { "electric_tank": 3, "heat_pump": 2, "dual_tank": 1 } },
+        { "id": "propane", "label": "Propane", "set": { "fuel": "propane" }, "add": { "gas_tankless": 2, "gas_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "baths",
+      "question": "How many bathrooms does your home have?",
+      "answers": [
+        { "id": "1-2b", "label": "1–2", "add": { "electric_tank": 1, "gas_tank": 1 } },
+        { "id": "2.5-4b", "label": "2.5–4", "add": { "gas_tankless": 2, "gas_tank": 1, "heat_pump": 1 } },
+        { "id": "4.5+b", "label": "4.5+", "add": { "gas_tankless": 3, "dual_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "stories",
+      "question": "Is your home 1 or 2 stories?",
+      "answers": [
+        { "id": "1s", "label": "1 story", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "2s", "label": "2 story", "add": { "gas_tankless": 1 } }
+      ]
+    },
+
+    {
+      "id": "elec_guardrail",
+      "question": "Note on electric & tankless",
+      "tooltip": "If your home is electric-only, we recommend keeping your setup or adding a second tank in parallel rather than switching to tankless.",
+      "showif": [{ "path": "fuel", "eq": "electric" }],
+      "answers": [
+        { "id": "ack", "label": "Got it", "add": { "electric_tank": 1, "dual_tank": 1, "heat_pump": 1 } }
+      ]
+    }
+  ],
+
+  "result_notes": {
+    "gas_tankless": {
+      "text": "Best for households with high demand, multiple bathrooms, or large families. Offers endless hot water with proper gas supply and venting.",
+      "photo_url": ""
+    },
+    "gas_tank": {
+      "text": "A great low-cost upgrade if you already have gas service. Reliable and simple installation for small to medium households.",
+      "photo_url": ""
+    },
+    "electric_tank": {
+      "text": "A straightforward option for electric-only homes. Consider adding a second tank to increase hot-water capacity.",
+      "photo_url": ""
+    },
+    "heat_pump": {
+      "text": "High-efficiency choice for electric homes with space for airflow. Delivers long-term savings with lower energy use.",
+      "photo_url": ""
+    },
+    "dual_tank": {
+      "text": "Adding a second tank boosts peak capacity without needing extra power or gas lines—perfect for large families.",
+      "photo_url": ""
+    }
+  }
+}
