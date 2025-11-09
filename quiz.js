@@ -1,280 +1,285 @@
-(() => {
-  // ------- helpers -------
-  const getEl = (sel, root = document) => root.querySelector(sel);
-  const ce = (tag, cls) => { const el = document.createElement(tag); if (cls) el.className = cls; return el; };
-  const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
+(()=>{
 
-  function sendGA(event, params) { try { window.gtag && window.gtag('event', event, params); } catch(_) {} }
+  // ---------- tiny utils ----------
+  const $ = (s,r=document)=>r.querySelector(s);
+  const el = (t,c)=>{const e=document.createElement(t); if(c) e.className=c; return e;};
+  const on = (e,ev,fn)=>e&&e.addEventListener(ev,fn);
+  const GA = (ev,params)=>{ try{ window.gtag && gtag('event',ev,params); }catch(_){} };
 
-  // Simple conditions: eq / neq / in / exists
-  function passesShowIf(flags, node) {
-    if (!node || !node.showif) return true;
-    return node.showif.every(c => {
+  // ---------- logic helpers ----------
+  function passesShowIf(flags, node){
+    if(!node || !node.showif) return true;
+    return node.showif.every(c=>{
       const v = flags[c.path];
-      if ('eq' in c) return v === c.eq;
-      if ('neq' in c) return v !== c.neq;
-      if ('in' in c) return (c.in || []).includes(v);
-      if ('exists' in c) return c.exists ? v !== undefined : v === undefined;
+      if('eq' in c) return v === c.eq;
+      if('neq' in c) return v !== c.neq;
+      if('in' in c) return (c.in||[]).includes(v);
+      if('exists' in c) return c.exists ? v!==undefined : v===undefined;
       return true;
     });
   }
 
-  // Compute progress % based on answered vs visible questions up to current
-  function progressPercent(state) {
-    const visible = state.questions.filter(q => passesShowIf(state.flags, q));
-    if (!visible.length) return 0;
-    const answered = Math.min(state.answeredCount, visible.length);
-    return Math.round((answered / visible.length) * 100);
+  function isMulti(q){ return (q.type || 'single') === 'multi'; }
+
+  function applyAnswer(state, q, a){
+    state.trail.push({
+      qId: q.id,
+      question: q.question || q.text || '',
+      answerId: a.id || null,
+      answerLabel: a.label || a.answer || ''
+    });
+    if(a.set) Object.assign(state.flags, a.set);
+    if(a.add){
+      for(const [k,v] of Object.entries(a.add)){
+        state.scores[k] = (state.scores[k]||0) + Number(v||0);
+      }
+    }
   }
 
-  // Pick max score (stable by options order)
-  function pickResult(options, scores) {
-    let best = options[0].id, bestVal = -Infinity;
-    for (const o of options) {
-      const v = Number(scores[o.id] || 0);
-      if (v > bestVal) { bestVal = v; best = o.id; }
+  function progressPct(state){
+    const visible = state.questions.filter(q=>passesShowIf(state.flags,q)).length || 1;
+    const done = Math.min(state.answeredCount, visible);
+    return Math.round((done / visible) * 100);
+  }
+
+  function pickResult(options, scores){
+    let best = options?.[0]?.id, bestVal = -Infinity;
+    for(const o of (options||[])){
+      const v = Number(scores[o.id]||0);
+      if(v > bestVal){ bestVal = v; best = o.id; }
     }
     return best;
   }
 
-  // ------- main -------
-  async function init(scriptEl) {
+  async function post(url, payload){
+    if(!url) return;
+    try{
+      await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    }catch(_){}
+  }
+
+  // ---------- main ----------
+  async function init(scriptEl){
     const rootSel = scriptEl.getAttribute('data-root') || '#wh-quiz';
-    const root = getEl(rootSel) || (() => { const d = ce('div'); d.id = rootSel.replace('#',''); document.body.appendChild(d); return d; })();
+    const root = $(rootSel) || (()=>{ const d=el('div'); d.id=rootSel.replace('#',''); document.body.appendChild(d); return d; })();
 
-    const cfgUrl = scriptEl.getAttribute('data-config');
-    if (!cfgUrl) {
-      root.textContent = 'Quiz config URL missing.';
-      sendGA('quiz_error', { reason: 'missing_config' });
-      return;
-    }
-
+    // load config
     let cfg;
-    try {
-      const r = await fetch(cfgUrl, { cache: 'no-store' });
-      cfg = await r.json();
-    } catch (e) {
-      root.textContent = 'Failed to load quiz.';
-      sendGA('quiz_error', { reason: 'config_load_failed' });
-      return;
+    try{
+      const res = await fetch(scriptEl.dataset.config, { cache:'no-store' });
+      cfg = await res.json();
+    }catch(_){
+      root.textContent = 'Failed to load quiz.'; GA('quiz_error',{reason:'config_load_failed'}); return;
     }
 
     // state
     const state = {
       cfg,
       flags: {},
-      scores: Object.fromEntries((cfg.options || []).map(o => [o.id, 0])),
+      scores: Object.fromEntries((cfg.options||[]).map(o=>[o.id,0])),
       stepIndex: 0,
       answeredCount: 0,
+      started: false,
       questions: cfg.questions || [],
-      started: false
+      selections: {},  // multi: { [qId]: Set<answerId> }
+      trail: [],       // full Q&A
+      contact: null
     };
 
-    function reset() {
-      state.flags = {};
-      for (const k of Object.keys(state.scores)) state.scores[k] = 0;
-      state.stepIndex = 0;
-      state.answeredCount = 0;
-      state.started = false;
-      render();
-    }
-
-    function visibleQuestionsUpTo(idx) {
-      return state.questions.slice(0, idx + 1).filter(q => passesShowIf(state.flags, q));
-    }
-
-    function gotoNext(currentQ, answerObj) {
-      // set flags
-      if (answerObj && answerObj.set) Object.assign(state.flags, answerObj.set);
-
-      // add scores
-      if (answerObj && answerObj.add) {
-        for (const [k, v] of Object.entries(answerObj.add)) {
-          state.scores[k] = (state.scores[k] || 0) + Number(v || 0);
-        }
-      }
-
-      state.answeredCount++;
-
-      // branch via explicit next
-      if (answerObj && answerObj.next) {
-        // jump to that question id if exists
-        const idx = state.questions.findIndex(q => q.id === answerObj.next);
-        if (idx > -1) { state.stepIndex = idx; render(); return; }
-        // allow next="result:<id>" to jump to end with forced result
-        if (answerObj.next.startsWith('result:')) {
-          showResult(answerObj.next.split(':')[1]);
-          return;
-        }
-      }
-
-      // otherwise, move forward to the next visible question
-      let i = state.stepIndex + 1;
-      while (i < state.questions.length) {
-        if (passesShowIf(state.flags, state.questions[i])) { state.stepIndex = i; render(); return; }
-        i++;
-      }
-      // no more questions → result
-      showResult();
-    }
-
-    function showHeader(container) {
-      const h = ce('div', 'quiz-header');
-      const t = ce('div', 'quiz-title'); t.textContent = cfg.title || '';
-      const s = ce('div', 'quiz-subtitle'); s.textContent = cfg.subtitle || '';
-      const progWrap = ce('div', 'quiz-progress');
-      const progBar = ce('div', 'quiz-progress-bar');
-      progBar.style.width = `${progressPercent(state)}%`;
-      progWrap.appendChild(progBar);
-      h.appendChild(t);
-      if (cfg.subtitle) h.appendChild(s);
-      h.appendChild(progWrap);
+    function header(container){
+      const h = el('div','quiz-header');
+      const t = el('div','quiz-title'); t.textContent = cfg.title || ''; h.appendChild(t);
+      if(cfg.subtitle){ const s = el('div','quiz-subtitle'); s.textContent = cfg.subtitle; h.appendChild(s); }
+      const p = el('div','quiz-progress'); const b = el('div','quiz-progress-bar'); b.style.width = progressPct(state)+'%'; p.appendChild(b);
+      h.appendChild(p);
       container.appendChild(h);
     }
 
-    function renderQuestion(q) {
-      const wrap = ce('div', 'quiz-question');
-      const qtext = ce('div', 'quiz-question-text'); qtext.textContent = q.question || q.text || '';
-      wrap.appendChild(qtext);
+    function nextVisibleIndex(from){
+      let i = from;
+      while(i < state.questions.length && !passesShowIf(state.flags, state.questions[i])) i++;
+      return (i < state.questions.length) ? i : -1;
+    }
 
-      if (q.tooltip) {
-        const tip = ce('div', 'quiz-tooltip'); tip.textContent = q.tooltip;
-        wrap.appendChild(tip);
-      }
+    function goAdvanceOrEnd(){
+      const ni = nextVisibleIndex(state.stepIndex + 1);
+      if(ni > -1){ state.stepIndex = ni; render(); return; }
+      if(cfg.collect_contact && !state.contact) { showContact(); return; }
+      showResult();
+    }
 
-      if (q.photo_url) {
-        const ph = ce('img', 'quiz-photo'); ph.src = q.photo_url; ph.alt = '';
-        wrap.appendChild(ph);
-      }
+    function renderQuestion(q){
+      const wrap = el('div','quiz-question');
+      const qtext = el('div','quiz-question-text'); qtext.textContent = q.question || q.text || ''; wrap.appendChild(qtext);
+      if(q.tooltip){ const tip = el('div','quiz-tooltip'); tip.textContent = q.tooltip; wrap.appendChild(tip); }
+      if(q.photo_url){ const ph = el('img','quiz-photo'); ph.src = q.photo_url; ph.alt=''; wrap.appendChild(ph); }
 
-      const list = ce('div', 'quiz-answers');
+      const list = el('div','quiz-answers');
+      const multi = isMulti(q);
+      if(multi && !state.selections[q.id]) state.selections[q.id] = new Set();
 
-      (q.answers || []).forEach((a, idx) => {
-        if (!passesShowIf(state.flags, a)) return;
+      (q.answers||[]).forEach((a,idx)=>{
+        if(!passesShowIf(state.flags,a)) return;
 
-        const btn = ce('button', 'quiz-answer');
-        // Accessible label text only; styling via CSS
+        const btn = el('button','quiz-answer');
+        btn.setAttribute('type','button');
+        btn.dataset.aid = a.id || String(idx);
         btn.textContent = a.label || a.answer || `Option ${idx+1}`;
+        if(a.photo_url){ const img = el('img','quiz-answer-photo'); img.src=a.photo_url; img.alt=''; btn.appendChild(img); }
+        if(a.tooltip){ const tt = el('div','quiz-answer-tooltip'); tt.textContent=a.tooltip; btn.appendChild(tt); }
 
-        // optional per-answer tooltip photo
-        if (a.tooltip) {
-          const t = ce('div', 'quiz-answer-tooltip'); t.textContent = a.tooltip;
-          btn.appendChild(t);
-        }
-        if (a.photo_url) {
-          const img = ce('img', 'quiz-answer-photo'); img.src = a.photo_url; img.alt = '';
-          btn.appendChild(img);
-        }
-
-        on(btn, 'click', () => {
-          if (!state.started) {
-            state.started = true;
-            sendGA('quiz_start', { quiz_id: cfg.id });
-          }
-          const pct = progressPercent(state);
-          sendGA('quiz_step', {
-            quiz_id: cfg.id,
-            step_id: q.id,
-            step_index: state.stepIndex,
-            answer_label: a.label || '',
-            percent_complete: pct
+        if(multi){
+          on(btn,'click',()=>{
+            const sel = state.selections[q.id];
+            const k = btn.dataset.aid;
+            if(sel.has(k)) sel.delete(k);
+            else{
+              const max = q.max || Infinity;
+              if(sel.size >= max) return;
+              sel.add(k);
+            }
+            btn.classList.toggle('selected', state.selections[q.id].has(k));
+            GA('quiz_toggle',{quiz_id:cfg.id, step_id:q.id, answer_id:k, selected:state.selections[q.id].has(k)});
           });
-          gotoNext(q, a);
-        });
+        }else{
+          on(btn,'click',()=>{
+            if(!state.started){ state.started=true; GA('quiz_start',{quiz_id:cfg.id}); }
+            GA('quiz_step',{quiz_id:cfg.id, step_id:q.id, step_index:state.stepIndex, answer_label:a.label||'', percent_complete:progressPct(state)});
+            applyAnswer(state,q,a);
+            state.answeredCount++;
+
+            if(a.next){
+              if(a.next.startsWith('result:')){ showResult(a.next.split(':')[1]); return; }
+              const nIdx = state.questions.findIndex(qq=>qq.id===a.next);
+              if(nIdx>-1){ state.stepIndex=nIdx; render(); return; }
+            }
+            goAdvanceOrEnd();
+          });
+        }
+
         list.appendChild(btn);
       });
-
       wrap.appendChild(list);
+
+      if(multi){
+        const controls = el('div','quiz-multi-controls');
+        const nextBtn = el('button','quiz-cta'); nextBtn.type='button'; nextBtn.textContent = 'Next';
+        const hint = el('div','quiz-hint'); controls.appendChild(nextBtn); controls.appendChild(hint);
+        wrap.appendChild(controls);
+
+        // restore selected on rerender
+        const sel = state.selections[q.id];
+        [...list.children].forEach(b => b.classList.toggle('selected', sel.has(b.dataset.aid)));
+
+        on(nextBtn,'click',()=>{
+          const ids = Array.from(state.selections[q.id]||[]);
+          const min = (q.min===0)?0:(q.min||1), max = q.max || Infinity;
+          if(ids.length < min){ hint.textContent = `Choose at least ${min}.`; return; }
+          if(!state.started){ state.started=true; GA('quiz_start',{quiz_id:cfg.id}); }
+
+          // apply selected in config order
+          const chosen = (q.answers||[]).filter(a => ids.includes(a.id||''));
+          chosen.forEach(a=>applyAnswer(state,q,a));
+          state.answeredCount++;
+          GA('quiz_step',{quiz_id:cfg.id, step_id:q.id, step_index:state.stepIndex, multi_count:ids.length, percent_complete:progressPct(state)});
+
+          // branch if any chosen defines next
+          const branch = chosen.find(a=>a && a.next);
+          if(branch && branch.next){
+            if(branch.next.startsWith('result:')){ showResult(branch.next.split(':')[1]); return; }
+            const nIdx = state.questions.findIndex(qq=>qq.id===branch.next);
+            if(nIdx>-1){ state.stepIndex=nIdx; render(); return; }
+          }
+          goAdvanceOrEnd();
+        });
+      }
+
       return wrap;
     }
 
-    function showResult(forcedId) {
-      const resId = forcedId || pickResult(cfg.options || [], state.scores);
-      const resOpt = (cfg.options || []).find(o => o.id === resId) || { id: resId, label: resId };
+    function showContact(){
+      const container = el('div','quiz'); header(container);
+      const f = el('form','quiz-contact');
+      (cfg.contact_fields||['name','email']).forEach(k=>{
+        const w=el('div','field');
+        w.innerHTML = `<label>${k.charAt(0).toUpperCase()+k.slice(1)}</label><input name="${k}" required>`;
+        f.appendChild(w);
+      });
+      const hp = el('input'); hp.name='company'; hp.style.display='none'; f.appendChild(hp); // honeypot
+      const btn = el('button','quiz-cta'); btn.type='submit'; btn.textContent='See recommendation'; f.appendChild(btn);
+      root.innerHTML=''; root.appendChild(container); container.appendChild(f);
 
-      const container = ce('div', 'quiz');
-      showHeader(container);
-
-      const res = ce('div', 'quiz-result');
-      const title = ce('div', 'quiz-result-title'); title.textContent = resOpt.label || 'Result';
-      res.appendChild(title);
-
-      // Optional CMS-enhanced result details in config.result_notes[resId]
-      const rn = (cfg.result_notes && cfg.result_notes[resId]) || {};
-      if (rn.photo_url) {
-        const img = ce('img', 'quiz-result-photo'); img.src = rn.photo_url; img.alt = '';
-        res.appendChild(img);
-      }
-      if (rn.text) {
-        const p = ce('div', 'quiz-result-text'); p.textContent = rn.text;
-        res.appendChild(p);
-      }
-
-      const ctas = ce('div', 'quiz-ctas');
-      const ctaPrimary = ce('a', 'quiz-cta');
-      ctaPrimary.href = rn.cta_url || resOpt.cta || cfg.cta_url || '#';
-      ctaPrimary.textContent = rn.cta_label || resOpt.cta_label || cfg.cta_label || 'Continue';
-      ctas.appendChild(ctaPrimary);
-
-      // Secondary CTA
-      const cta2Url = rn.cta2_url || cfg.cta2_url;
-      const cta2Label = rn.cta2_label || cfg.cta2_label;
-      if (cta2Url && cta2Label) {
-        const ctaSecondary = ce('a', 'quiz-cta-secondary');
-        ctaSecondary.href = cta2Url;
-        ctaSecondary.textContent = cta2Label;
-        ctas.appendChild(ctaSecondary);
-      }
-
-      // Restart button (optional)
-      const restart = ce('button', 'quiz-restart'); restart.textContent = 'Restart';
-      on(restart, 'click', () => { sendGA('quiz_restart', { quiz_id: cfg.id }); reset(); });
-      ctas.appendChild(restart);
-
-      res.appendChild(ctas);
-      container.appendChild(res);
-
-      root.innerHTML = '';
-      root.appendChild(container);
-
-      sendGA('quiz_complete', {
-        quiz_id: cfg.id,
-        result_id: resId,
-        percent_complete: 100
+      on(f,'submit',async e=>{
+        e.preventDefault(); if(hp.value) return;
+        state.contact = Object.fromEntries(new FormData(f).entries());
+        GA('quiz_lead',{quiz_id:cfg.id});
+        await post(cfg.webhook,{type:'lead', quiz_id:cfg.id, contact:state.contact, trail:state.trail, flags:state.flags, page:location.href, ts:Date.now()});
+        showResult();
       });
     }
 
-    function render() {
+    function showResult(forcedId){
+      const resId = forcedId || pickResult(cfg.options||[], state.scores);
+      const resOpt = (cfg.options||[]).find(o=>o.id===resId) || { id:resId, label:resId };
+
+      const container = el('div','quiz'); header(container);
+
+      const res = el('div','quiz-result');
+      const title = el('div','quiz-result-title'); title.textContent = resOpt.label || 'Result'; res.appendChild(title);
+
+      const rn = (cfg.result_notes && cfg.result_notes[resId]) || {};
+      if(rn.photo_url){ const img=el('img','quiz-result-photo'); img.src=rn.photo_url; img.alt=''; res.appendChild(img); }
+      if(rn.text){ const p=el('div','quiz-result-text'); p.textContent=rn.text; res.appendChild(p); }
+
+      const ctas = el('div','quiz-ctas');
+      const cta = el('a','quiz-cta'); cta.href = rn.cta_url || resOpt.cta || cfg.cta_url || '#'; cta.textContent = rn.cta_label || resOpt.cta_label || cfg.cta_label || 'Continue'; ctas.appendChild(cta);
+      if(cfg.cta2_url && cfg.cta2_label){ const c2=el('a','quiz-cta-secondary'); c2.href=cfg.cta2_url; c2.textContent=cfg.cta2_label; ctas.appendChild(c2); }
+      const restart = el('button','quiz-restart'); restart.textContent='Restart'; on(restart,'click',()=>{ GA('quiz_restart',{quiz_id:cfg.id}); location.reload(); }); ctas.appendChild(restart);
+      res.appendChild(ctas);
+
+      root.innerHTML=''; root.appendChild(container); container.appendChild(res);
+
+      GA('quiz_complete',{quiz_id:cfg.id, result_id:resId, percent_complete:100});
+
+      // final payload
+      post(cfg.webhook,{
+        type:'completion',
+        quiz_id: cfg.id,
+        result_id: resId,
+        result_label: resOpt.label||resId,
+        scores: state.scores,
+        flags: state.flags,
+        trail: state.trail,       // all Q&A (including multi)
+        contact: state.contact||null,
+        page: location.href,
+        ts: Date.now()
+      });
+    }
+
+    function render(){
       const q = state.questions[state.stepIndex];
 
-      // If current question is hidden by conditions, auto-advance
-      if (q && !passesShowIf(state.flags, q)) {
-        // advance forward to next visible, else finish
-        let i = state.stepIndex + 1;
-        while (i < state.questions.length && !passesShowIf(state.flags, state.questions[i])) i++;
-        if (i < state.questions.length) { state.stepIndex = i; return render(); }
-        return showResult();
+      if(q && !passesShowIf(state.flags,q)){
+        const ni = nextVisibleIndex(state.stepIndex+1);
+        if(ni>-1){ state.stepIndex=ni; render(); return; }
+        if(cfg.collect_contact && !state.contact){ showContact(); return; }
+        showResult(); return;
       }
 
-      const container = ce('div', 'quiz');
-      showHeader(container);
-
-      if (q) {
-        container.appendChild(renderQuestion(q));
-      } else {
-        // No questions -> immediate result (edge case)
-        showResult();
-        return;
-      }
-
-      root.innerHTML = '';
-      root.appendChild(container);
+      const container = el('div','quiz'); header(container);
+      if(q){ container.appendChild(renderQuestion(q)); }
+      else { showResult(); return; }
+      root.innerHTML=''; root.appendChild(container);
     }
 
     render();
   }
 
-  // auto-run for any <script src="...wh-quiz.js" data-config="...">
-  const scripts = Array.from(document.querySelectorAll('script[src*="quiz.js"]'));
-  scripts.forEach(init);
+  // ---------- filename-agnostic boot ----------
+  function boot(){
+    const scripts = [...document.scripts].filter(s => s.dataset && s.dataset.config);
+    scripts.forEach(s => { if(s.dataset.booted==='1') return; s.dataset.booted='1'; requestAnimationFrame(()=>init(s)); });
+  }
+  (document.readyState==='loading') ? document.addEventListener('DOMContentLoaded', boot, {once:true}) : boot();
+
 })();
