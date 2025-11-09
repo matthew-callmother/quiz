@@ -1,305 +1,161 @@
-/* quiz.js — single file, drop-in (multi-select + FIFO replace, GA, webhook, contact, filename-agnostic boot) */
-(()=>{
-  // ---------- tiny utils ----------
-  const $=(s,r=document)=>r.querySelector(s);
-  const el=(t,c)=>{const e=document.createElement(t); if(c) e.className=c; return e;};
-  const on=(e,ev,fn)=>e&&e.addEventListener(ev,fn,{passive:false});
-  const GA=(ev,params)=>{try{window.gtag&&gtag('event',ev,params)}catch(_){}};  
+{
+  "id": "tankless-or-not",
+  "title": "Should I Buy a Tankless?",
+  "subtitle": "Is a tankless water heater right for your home?",
+  "cta_url": "/services/water-heater-installation",
+  "cta_label": "Book an installation",
+  "cta2_url": "/contact",
+  "cta2_label": "Talk to a plumber",
+  "webhook": "https://hooks.make.com/REPLACE_ME",
+  "collect_contact": true,
+  "contact_fields": ["name", "email"],
 
-  // ---------- logic helpers ----------
-  const keyFor=(a,idx)=> (a && a.id!=null && a.id!=='') ? String(a.id) : String(idx);
+  "options": [
+    { "id": "gas_tankless",  "label": "Gas Tankless", "cta": "/services/tankless-water-heater-installation" },
+    { "id": "gas_tank",      "label": "Gas Tank", "cta": "/services/water-heater-installation" },
+    { "id": "electric_tank", "label": "Electric Tank", "cta": "/services/water-heater-installation" },
+    { "id": "heat_pump",     "label": "Heat Pump (Hybrid)", "cta": "/services/water-heater-installation" },
+    { "id": "dual_tank",     "label": "Add a Second Tank (Parallel)", "cta": "/services/water-heater-installation" }
+  ],
 
-  function passesShowIf(flags,node){
-    if(!node||!node.showif) return true;
-    return node.showif.every(c=>{
-      const v=flags[c.path];
-      if('eq'in c) return v===c.eq;
-      if('neq'in c) return v!==c.neq;
-      if('in'in c) return (c.in||[]).includes(v);
-      if('exists'in c) return c.exists? v!==undefined : v===undefined;
-      return true;
-    });
-  }
-  const isMulti=q=> (q.type||'single')==='multi';
+  "questions": [
+    {
+      "id": "priority",
+      "type": "multi",
+      "min": 1,
+      "max": 2,
+      "question": "What’s most important to you? (choose up to 2)",
+      "answers": [
+        { "id": "cost", "label": "Lower installation cost", "add": { "gas_tank": 3, "electric_tank": 3 } },
+        { "id": "longevity", "label": "Long-lasting product", "add": { "gas_tankless": 2, "heat_pump": 1 } },
+        { "id": "savings", "label": "Long term cost savings", "add": { "heat_pump": 3, "gas_tankless": 1 } },
+        { "id": "endless", "label": "Endless hot water", "add": { "gas_tankless": 3, "dual_tank": 1 } },
+        { "id": "efficient", "label": "Energy efficiency", "add": { "heat_pump": 3, "gas_tankless": 1 } }
+      ]
+    },
 
-  function applyAnswer(state,q,a,idx){
-    state.trail.push({
-      qId:q.id,
-      question:q.question||q.text||'',
-      answerId:keyFor(a,idx),
-      answerLabel:a.label||a.answer||''
-    });
-    if(a.set) Object.assign(state.flags, a.set);
-    if(a.add) for(const [k,v] of Object.entries(a.add)){
-      state.scores[k]=(state.scores[k]||0)+Number(v||0);
+    {
+      "id": "current_type",
+      "question": "What kind of water heater do you currently have?",
+      "answers": [
+        { "id": "tank", "label": "Water heater tank", "set": { "type": "tank" } },
+        { "id": "hybrid", "label": "Hybrid water heater", "set": { "type": "hybrid" } },
+        { "id": "new", "label": "Building a new home and want to pick", "set": { "type": "new" } }
+      ]
+    },
+
+    {
+      "id": "tank_size",
+      "question": "What tank size?",
+      "showif": [{ "path": "type", "eq": "tank" }],
+      "answers": [
+        { "id": "50g", "label": "50 gallon", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "75g", "label": "75 gallon", "add": { "gas_tank": 2, "electric_tank": 2 } },
+        { "id": "100g", "label": "100 gallon", "add": { "gas_tank": 3, "dual_tank": 1 } }
+      ]
+    },
+
+    {
+      "id": "hybrid_size",
+      "question": "What size is your hybrid water heater?",
+      "showif": [{ "path": "type", "eq": "hybrid" }],
+      "answers": [
+        { "id": "50h", "label": "50 gallon", "add": { "heat_pump": 2 } },
+        { "id": "65h", "label": "65 gallon", "add": { "heat_pump": 2 } },
+        { "id": "80h", "label": "80 gallon", "add": { "heat_pump": 3 } }
+      ]
+    },
+
+    {
+      "id": "people",
+      "question": "How many people are in the home?",
+      "answers": [
+        { "id": "1-2", "label": "1–2", "add": { "electric_tank": 2, "heat_pump": 1 } },
+        { "id": "3-4", "label": "3–4", "add": { "gas_tank": 1, "gas_tankless": 1 } },
+        { "id": "5+", "label": "5+", "add": { "gas_tankless": 3, "dual_tank": 1 } }
+      ]
+    },
+
+    {
+      "id": "num_heaters",
+      "question": "How many water heaters do you have?",
+      "answers": [
+        { "id": "1h", "label": "1", "add": {} },
+        { "id": "2h", "label": "2", "add": { "dual_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "location",
+      "question": "Where is it located?",
+      "answers": [
+        { "id": "garage", "label": "Garage", "add": { "gas_tankless": 1, "heat_pump": 1 } },
+        { "id": "attic", "label": "Attic", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "closet", "label": "Hall closet", "add": { "heat_pump": 2 } }
+      ]
+    },
+
+    {
+      "id": "fuel",
+      "question": "What fuel source does your home use?",
+      "tooltip": "If your heater has a yellow flexible line, it’s natural gas.",
+      "answers": [
+        { "id": "gas", "label": "Gas", "set": { "fuel": "gas" }, "add": { "gas_tankless": 2, "gas_tank": 2 } },
+        { "id": "electric", "label": "Electric", "set": { "fuel": "electric" }, "add": { "electric_tank": 3, "heat_pump": 2, "dual_tank": 1 } },
+        { "id": "propane", "label": "Propane", "set": { "fuel": "propane" }, "add": { "gas_tankless": 2, "gas_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "baths",
+      "question": "How many bathrooms does your home have?",
+      "answers": [
+        { "id": "1-2b", "label": "1–2", "add": { "electric_tank": 1, "gas_tank": 1 } },
+        { "id": "2.5-4b", "label": "2.5–4", "add": { "gas_tankless": 2, "gas_tank": 1, "heat_pump": 1 } },
+        { "id": "4.5+b", "label": "4.5+", "add": { "gas_tankless": 3, "dual_tank": 2 } }
+      ]
+    },
+
+    {
+      "id": "stories",
+      "question": "Is your home 1 or 2 stories?",
+      "answers": [
+        { "id": "1s", "label": "1 story", "add": { "gas_tank": 1, "electric_tank": 1 } },
+        { "id": "2s", "label": "2 story", "add": { "gas_tankless": 1 } }
+      ]
+    },
+
+    {
+      "id": "elec_guardrail",
+      "question": "Note on electric & tankless",
+      "tooltip": "If your home is electric-only, we recommend keeping your setup or adding a second tank in parallel rather than switching to tankless.",
+      "showif": [{ "path": "fuel", "eq": "electric" }],
+      "answers": [
+        { "id": "ack", "label": "Got it", "add": { "electric_tank": 1, "dual_tank": 1, "heat_pump": 1 } }
+      ]
+    }
+  ],
+
+  "result_notes": {
+    "gas_tankless": {
+      "text": "Best for households with high demand, multiple bathrooms, or large families. Offers endless hot water with proper gas supply and venting.",
+      "photo_url": ""
+    },
+    "gas_tank": {
+      "text": "A great low-cost upgrade if you already have gas service. Reliable and simple installation for small to medium households.",
+      "photo_url": ""
+    },
+    "electric_tank": {
+      "text": "A straightforward option for electric-only homes. Consider adding a second tank to increase hot-water capacity.",
+      "photo_url": ""
+    },
+    "heat_pump": {
+      "text": "High-efficiency choice for electric homes with space for airflow. Delivers long-term savings with lower energy use.",
+      "photo_url": ""
+    },
+    "dual_tank": {
+      "text": "Adding a second tank boosts peak capacity without needing extra power or gas lines—perfect for large families.",
+      "photo_url": ""
     }
   }
-
-  function progressPct(state){
-    const vis=state.questions.filter(q=>passesShowIf(state.flags,q)).length||1;
-    const done=Math.min(state.answeredCount,vis);
-    return Math.round((done/vis)*100);
-  }
-
-  function pickResult(options,scores){
-    let best=options?.[0]?.id, bestVal=-Infinity;
-    for(const o of (options||[])){
-      const v=Number(scores[o.id]||0);
-      if(v>bestVal){bestVal=v;best=o.id;}
-    }
-    return best;
-  }
-
-  async function post(url,payload){
-    if(!url) return;
-    try{
-      await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    }catch(_){}
-  }
-
-  // ---------- main ----------
-  async function init(scriptEl){
-    const rootSel=scriptEl.getAttribute('data-root')||'#wh-quiz';
-    const root=$(rootSel)||(()=>{const d=el('div'); d.id=rootSel.replace('#',''); document.body.appendChild(d); return d;})();
-
-    // load config
-    let cfg;
-    try{
-      const res=await fetch(scriptEl.dataset.config,{cache:'no-store'});
-      cfg=await res.json();
-    }catch(_){
-      root.textContent='Failed to load quiz.'; GA('quiz_error',{reason:'config_load_failed'}); return;
-    }
-
-    // state
-    const state={
-      cfg,
-      flags:{},
-      scores:Object.fromEntries((cfg.options||[]).map(o=>[o.id,0])),
-      stepIndex:0,
-      answeredCount:0,
-      started:false,
-      questions:cfg.questions||[],
-      selections:{},       // multi: { [qId]: Set<answerId> }
-      selectionOrder:{},   // multi: { [qId]: [answerId,...] } FIFO oldest->newest
-      trail:[],            // full Q&A
-      contact:null
-    };
-
-    function header(container){
-      const h=el('div','quiz-header');
-      const t=el('div','quiz-title'); t.textContent=cfg.title||''; h.appendChild(t);
-      if(cfg.subtitle){ const s=el('div','quiz-subtitle'); s.textContent=cfg.subtitle; h.appendChild(s); }
-      const p=el('div','quiz-progress'); const b=el('div','quiz-progress-bar'); b.style.width=progressPct(state)+'%'; p.appendChild(b);
-      h.appendChild(p);
-      container.appendChild(h);
-    }
-
-    const nextVisibleIndex=(from)=>{
-      let i=from; while(i<state.questions.length && !passesShowIf(state.flags,state.questions[i])) i++;
-      return (i<state.questions.length)?i:-1;
-    };
-
-    function goAdvanceOrEnd(){
-      const ni=nextVisibleIndex(state.stepIndex+1);
-      if(ni>-1){ state.stepIndex=ni; render(); return; }
-      if(cfg.collect_contact && !state.contact){ showContact(); return; }
-      showResult();
-    }
-
-    function renderQuestion(q){
-      const wrap=el('div','quiz-question');
-      const qtext=el('div','quiz-question-text'); qtext.textContent=q.question||q.text||''; wrap.appendChild(qtext);
-      if(q.tooltip){ const tip=el('div','quiz-tooltip'); tip.textContent=q.tooltip; wrap.appendChild(tip); }
-      if(q.photo_url){ const ph=el('img','quiz-photo'); ph.src=q.photo_url; ph.alt=''; wrap.appendChild(ph); }
-
-      const list=el('div','quiz-answers');
-      const multi=isMulti(q);
-      if(multi){
-        if(!state.selections[q.id]) state.selections[q.id]=new Set();
-        if(!state.selectionOrder[q.id]) state.selectionOrder[q.id]=[];
-      }
-
-      (q.answers||[]).forEach((a,idx)=>{
-        if(!passesShowIf(state.flags,a)) return;
-
-        const btn=el('button','quiz-answer');
-        btn.type='button';
-        const aid=keyFor(a,idx);
-        btn.dataset.aid=aid;
-        btn.textContent=a.label||a.answer||`Option ${idx+1}`;
-        if(a.photo_url){ const img=el('img','quiz-answer-photo'); img.src=a.photo_url; img.alt=''; btn.appendChild(img); }
-        if(a.tooltip){ const tt=el('div','quiz-answer-tooltip'); tt.textContent=a.tooltip; btn.appendChild(tt); }
-
-        if(multi){
-          on(btn,'click',()=>{
-            const sel=state.selections[q.id];
-            const order=state.selectionOrder[q.id];
-            const max=(Number.isFinite(q.max)&&q.max>0)?q.max:Infinity;
-
-            // toggle off
-            if(sel.has(aid)){
-              sel.delete(aid);
-              const i=order.indexOf(aid); if(i>-1) order.splice(i,1);
-              btn.classList.remove('selected');
-              GA('quiz_toggle',{quiz_id:cfg.id,step_id:q.id,answer_id:aid,selected:false});
-              return;
-            }
-
-            // cap reached -> FIFO replace (drop oldest) then add
-            if(sel.size>=max && isFinite(max)){
-              const oldest=order.shift();
-              if(oldest!==undefined){
-                sel.delete(oldest);
-                [...list.children].forEach(b=>{ if(b.dataset.aid===oldest) b.classList.remove('selected'); });
-              }
-            }
-
-            sel.add(aid);
-            order.push(aid);
-            btn.classList.add('selected');
-            GA('quiz_toggle',{quiz_id:cfg.id,step_id:q.id,answer_id:aid,selected:true});
-          });
-        }else{
-          on(btn,'click',()=>{
-            if(!state.started){ state.started=true; GA('quiz_start',{quiz_id:cfg.id}); }
-            GA('quiz_step',{quiz_id:cfg.id,step_id:q.id,step_index:state.stepIndex,answer_label:a.label||'',percent_complete:progressPct(state)});
-            applyAnswer(state,q,a,idx);
-            state.answeredCount++;
-
-            if(a.next){
-              if(a.next.startsWith('result:')){ showResult(a.next.split(':')[1]); return; }
-              const nIdx=state.questions.findIndex(qq=>qq.id===a.next);
-              if(nIdx>-1){ state.stepIndex=nIdx; render(); return; }
-            }
-            goAdvanceOrEnd();
-          });
-        }
-
-        list.appendChild(btn);
-      });
-      wrap.appendChild(list);
-
-      if(multi){
-        const controls=el('div','quiz-multi-controls');
-        const nextBtn=el('button','quiz-cta'); nextBtn.type='button'; nextBtn.textContent='Next';
-        const hint=el('div','quiz-hint'); controls.appendChild(nextBtn); controls.appendChild(hint);
-        wrap.appendChild(controls);
-
-        // restore selected styles on rerender
-        const sel=state.selections[q.id];
-        [...list.children].forEach(b=>b.classList.toggle('selected',sel.has(b.dataset.aid)));
-
-        on(nextBtn,'click',()=>{
-          const ids=Array.from(state.selections[q.id]||[]);
-          const min=(q.min===0)?0:(q.min||1);
-          if(ids.length<min){ hint.textContent=`Choose at least ${min}.`; return; }
-
-          if(!state.started){ state.started=true; GA('quiz_start',{quiz_id:cfg.id}); }
-
-          // apply all selected in config order
-          const chosen=(q.answers||[]).filter((a2,i2)=>ids.includes(keyFor(a2,i2)));
-          chosen.forEach((a2,i2)=>applyAnswer(state,q,a2,i2));
-
-          state.answeredCount++;
-          GA('quiz_step',{quiz_id:cfg.id,step_id:q.id,step_index:state.stepIndex,multi_count:ids.length,percent_complete:progressPct(state)});
-
-          // branch if any chosen defines next
-          const branch=chosen.find(a2=>a2&&a2.next);
-          if(branch&&branch.next){
-            if(branch.next.startsWith('result:')){ showResult(branch.next.split(':')[1]); return; }
-            const nIdx=state.questions.findIndex(qq=>qq.id===branch.next);
-            if(nIdx>-1){ state.stepIndex=nIdx; render(); return; }
-          }
-          goAdvanceOrEnd();
-        });
-      }
-
-      return wrap;
-    }
-
-    function showContact(){
-      const container=el('div','quiz'); header(container);
-      const f=el('form','quiz-contact');
-      (cfg.contact_fields||['name','email']).forEach(k=>{
-        const w=el('div','field');
-        w.innerHTML=`<label>${k.charAt(0).toUpperCase()+k.slice(1)}</label><input name="${k}" required>`;
-        f.appendChild(w);
-      });
-      const hp=el('input'); hp.name='company'; hp.style.display='none'; f.appendChild(hp); // honeypot
-      const btn=el('button','quiz-cta'); btn.type='submit'; btn.textContent='See recommendation'; f.appendChild(btn);
-      root.innerHTML=''; root.appendChild(container); container.appendChild(f);
-
-      on(f,'submit',async e=>{
-        e.preventDefault(); if(hp.value) return;
-        state.contact=Object.fromEntries(new FormData(f).entries());
-        GA('quiz_lead',{quiz_id:cfg.id});
-        await post(cfg.webhook,{type:'lead',quiz_id:cfg.id,contact:state.contact,trail:state.trail,flags:state.flags,page:location.href,ts:Date.now()});
-        showResult();
-      });
-    }
-
-    function showResult(forcedId){
-      const resId=forcedId||pickResult(cfg.options||[],state.scores);
-      const resOpt=(cfg.options||[]).find(o=>o.id===resId)||{id:resId,label:resId};
-
-      const container=el('div','quiz'); header(container);
-
-      const res=el('div','quiz-result');
-      const ttl=el('div','quiz-result-title'); ttl.textContent = resOpt.label || 'Result'; res.appendChild(ttl);
-
-      const rn=(cfg.result_notes&&cfg.result_notes[resId])||{};
-      if(rn.photo_url){ const im=el('img','quiz-result-photo'); im.src=rn.photo_url; im.alt=''; res.appendChild(im); }
-      if(rn.text){ const tx=el('div','quiz-result-text'); tx.textContent=rn.text; res.appendChild(tx); }
-
-      const ctas=el('div','quiz-ctas');
-      const a=el('a','quiz-cta'); a.href=rn.cta_url||resOpt.cta||cfg.cta_url||'#'; a.textContent=rn.cta_label||resOpt.cta_label||cfg.cta_label||'Continue'; ctas.appendChild(a);
-      if(cfg.cta2_url&&cfg.cta2_label){ const a2=el('a','quiz-cta-secondary'); a2.href=cfg.cta2_url; a2.textContent=cfg.cta2_label; ctas.appendChild(a2); }
-      const re=el('button','quiz-restart'); re.textContent='Restart'; on(re,'click',()=>{ GA('quiz_restart',{quiz_id:cfg.id}); location.reload(); }); ctas.appendChild(re);
-      res.appendChild(ctas);
-
-      root.innerHTML=''; root.appendChild(container); container.appendChild(res);
-
-      GA('quiz_complete',{quiz_id:cfg.id,result_id:resId,percent_complete:100});
-
-      // final payload
-      post(cfg.webhook,{
-        type:'completion',
-        quiz_id:cfg.id,
-        result_id:resId,
-        result_label:resOpt.label||resId,
-        scores:state.scores,
-        flags:state.flags,
-        trail:state.trail,
-        contact:state.contact||null,
-        page:location.href,
-        ts:Date.now()
-      });
-    }
-
-    function render(){
-      const q=state.questions[state.stepIndex];
-
-      if(q && !passesShowIf(state.flags,q)){
-        const ni=nextVisibleIndex(state.stepIndex+1);
-        if(ni>-1){ state.stepIndex=ni; render(); return; }
-        if(cfg.collect_contact && !state.contact){ showContact(); return; }
-        showResult(); return;
-      }
-
-      const container=el('div','quiz'); header(container);
-      if(q){ container.appendChild(renderQuestion(q)); } else { showResult(); return; }
-      root.innerHTML=''; root.appendChild(container);
-    }
-
-    render();
-  }
-
-  // ---------- filename-agnostic boot ----------
-  function boot(){
-    const scripts=[...document.scripts].filter(s=>s.dataset&&s.dataset.config);
-    scripts.forEach(s=>{ if(s.dataset.booted==='1') return; s.dataset.booted='1'; requestAnimationFrame(()=>init(s)); });
-  }
-  (document.readyState==='loading') ? document.addEventListener('DOMContentLoaded',boot,{once:true}) : boot();
-
-})();
+}
