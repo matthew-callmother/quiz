@@ -6,7 +6,7 @@
   "cta_label": "Book an installation",
   "cta2_url": "/contact",
   "cta2_label": "Talk to a plumber",
-  "webhook": "https://hooks.make.com/REPLACE_ME",
+  "webhook": "https://hooks.zapier.com/hooks/catch/20152562/u694jdf/",
   "collect_contact": true,
   "contact_fields": ["name", "email"],
 
