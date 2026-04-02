@@ -1,0 +1,129 @@
+{
+  "version": "1.0.0",
+  "id": "can-i-use-trenchless-sewer-repair",
+  "quizId": "can-i-use-trenchless-sewer-repair",
+  "title": "Can I Use Trenchless Sewer Repair?",
+  "subtitle": "Answer a few quick questions to see whether trenchless is likely a fit.",
+  "cta_url": "/services/sewer-line-repair",
+  "cta_label": "Book a sewer inspection",
+  "cta2_url": "/contact",
+  "cta2_label": "Talk to a sewer specialist",
+  "webhook": "https://hooks.zapier.com/hooks/catch/20152562/u694jdf/",
+  "submission_defaults": {
+    "booking_provider": "quiz_booking_provider",
+    "source": "website_quiz",
+    "campaign": "trenchless_sewer_quiz",
+    "business_unit": "Sewer",
+    "job_type": "Estimate",
+    "priority": "Normal",
+    "is_first_time_client": true
+  },
+  "serviceable_zips": ["76107", "76109", "76116", "76126", "76132", "76133"],
+
+  "options": [
+    { "id": "trenchless_good", "label": "Likely a Great Trenchless Candidate", "cta": "/services/trenchless-sewer-repair" },
+    { "id": "trenchless_maybe", "label": "Possible Trenchless Candidate (Needs Camera Inspection)", "cta": "/services/trenchless-sewer-repair" },
+    { "id": "traditional_repair", "label": "Traditional Excavation May Be Safer", "cta": "/services/sewer-line-repair" }
+  ],
+
+  "questions": [
+    {
+      "id": "pipe_material",
+      "question": "What are your damaged sewer pipes made from?",
+      "answers": [
+        { "id": "schedule40_pvc", "label": "Schedule 40 PVC", "add": { "trenchless_good": 3, "trenchless_maybe": 1 } },
+        { "id": "pvc", "label": "PVC", "add": { "trenchless_good": 3, "trenchless_maybe": 1 } },
+        { "id": "cast_iron", "label": "Cast Iron", "add": { "trenchless_maybe": 2, "traditional_repair": 1 } },
+        { "id": "clay", "label": "Clay", "add": { "trenchless_maybe": 2, "traditional_repair": 1 } },
+        { "id": "orangeburg", "label": "Orangeburg", "add": { "traditional_repair": 3, "trenchless_maybe": 1 } },
+        { "id": "unknown", "label": "I don’t know", "add": { "trenchless_maybe": 2 } }
+      ]
+    },
+    {
+      "id": "pipe_age",
+      "question": "How old is your damaged pipe section?",
+      "answers": [
+        { "id": "lt10", "label": "Less than 10 years old", "add": { "trenchless_good": 3 } },
+        { "id": "11_20", "label": "11-20 years old", "add": { "trenchless_good": 2, "trenchless_maybe": 1 } },
+        { "id": "21_30", "label": "21-30 years old", "add": { "trenchless_maybe": 2 } },
+        { "id": "30_plus", "label": "30+ years old", "add": { "traditional_repair": 2, "trenchless_maybe": 1 } }
+      ]
+    },
+    {
+      "id": "problems",
+      "type": "multi",
+      "min": 1,
+      "max": 9,
+      "question": "What sewer line problems are you experiencing? (check all that apply)",
+      "answers": [
+        { "id": "frequent_clogs", "label": "Frequent clogs and blockages", "add": { "trenchless_maybe": 1 } },
+        { "id": "gurgling", "label": "Gurgling sounds in my drains", "add": { "trenchless_maybe": 1 } },
+        { "id": "pests", "label": "Pests in my floor drains", "add": { "traditional_repair": 1, "trenchless_maybe": 1 } },
+        { "id": "corrosion", "label": "Pipe corrosion", "add": { "traditional_repair": 2, "trenchless_maybe": 1 } },
+        { "id": "backup", "label": "Sewage backup in my drains", "add": { "traditional_repair": 2, "trenchless_maybe": 1 } },
+        { "id": "smelly_drains", "label": "Smelly drains inside the house", "add": { "trenchless_maybe": 1 } },
+        { "id": "smelly_lawn", "label": "Smelly patches of my lawn", "add": { "trenchless_maybe": 1, "traditional_repair": 1 } },
+        { "id": "soggy_or_sinkholes", "label": "Soggy spots or sinkholes in the yard", "add": { "traditional_repair": 3 } },
+        { "id": "tree_roots", "label": "Tree root intrusions", "add": { "trenchless_maybe": 2, "trenchless_good": 1 } }
+      ]
+    },
+    {
+      "id": "biggest_concern",
+      "question": "What is your biggest sewer repair concern? (choose the #1 issue)",
+      "answers": [
+        { "id": "excavation", "label": "Excavation- I don’t want to tear up expensive landscaping or hardscaping", "add": { "trenchless_good": 3, "trenchless_maybe": 2 } },
+        { "id": "foundation", "label": "Foundation- My damaged pipe is very close to the foundation", "add": { "trenchless_good": 2, "trenchless_maybe": 2 } },
+        { "id": "budget", "label": "Tight budget- I have to be sure it’s fixed right one time", "add": { "trenchless_maybe": 2, "traditional_repair": 1 } }
+      ]
+    },
+    {
+      "id": "zip_capture",
+      "type": "contact_capture",
+      "question": "What is your zip code? (We use this information to provide the best local advice.)",
+      "cta_label": "Next",
+      "fields": [
+        { "key": "zip", "type": "zip", "label": "ZIP Code", "required": true, "placeholder": "76107" }
+      ]
+    },
+    {
+      "id": "pipe_condition",
+      "question": "How would you describe the condition of your damaged sewer pipe?",
+      "answers": [
+        { "id": "okay", "label": "Okay- I’m only dealing with small pinhole leaks or root intrusions", "add": { "trenchless_good": 3, "trenchless_maybe": 1 } },
+        { "id": "not_good", "label": "Not Good- There are multiple breaks and penetrations", "add": { "trenchless_maybe": 2, "traditional_repair": 2 } },
+        { "id": "yikes", "label": "Yikes- The pipe’s corroded, the break is big and the leak is severe", "add": { "traditional_repair": 4 } },
+        { "id": "cond_unknown", "label": "I don’t know", "add": { "trenchless_maybe": 2 } }
+      ]
+    },
+    {
+      "id": "contact_request",
+      "type": "contact_capture",
+      "question": "Request email/contact",
+      "cta_label": "See recommendation",
+      "fields": [
+        { "key": "full_name", "type": "text", "label": "Full Name", "required": true },
+        { "key": "email", "type": "email", "label": "Email", "required": true },
+        { "key": "phone", "type": "phone", "label": "Phone", "required": true },
+        { "type": "address", "label": "Address (Optional)", "required": false }
+      ]
+    }
+  ],
+
+  "result_notes": {
+    "trenchless_good": {
+      "text": "Based on your answers, trenchless repair appears to be a strong fit. A camera inspection can confirm method and exact scope.",
+      "cta_label": "Book trenchless evaluation",
+      "cta_url": "/services/trenchless-sewer-repair"
+    },
+    "trenchless_maybe": {
+      "text": "You may be a trenchless candidate, but a camera inspection is needed to confirm severity, access points, and final approach.",
+      "cta_label": "Schedule camera inspection",
+      "cta_url": "/services/sewer-camera-inspection"
+    },
+    "traditional_repair": {
+      "text": "Your answers suggest open excavation may be safer or more durable. A licensed technician should verify on site.",
+      "cta_label": "Schedule sewer repair consult",
+      "cta_url": "/services/sewer-line-repair"
+    }
+  }
+}
